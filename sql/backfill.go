@@ -71,7 +71,11 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 	var droppedColumnDescs []ColumnDescriptor
 	var droppedIndexDescs []IndexDescriptor
 	var newIndexDescs []IndexDescriptor
+	mutationID := oldTableDesc.Mutations[0].MutationID
 	for _, m := range oldTableDesc.Mutations {
+		if m.MutationID != mutationID {
+			break
+		}
 		switch m.Direction {
 		case DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
@@ -171,16 +175,9 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 		}
 
 		// TODO(tamird): This will fall down in production use. We need to do
-		// something better (see #2036). In particular, this implementation
-		// has the following problems:
-		// - Very large tables will generate an enormous batch here. This
-		// isn't really a problem in itself except that it will exacerbate
-		// the other issue:
-		// - Any non-quiescent table that this runs against will end up with
-		// an inconsistent index. This is because as inserts/updates continue
-		// to roll in behind this operation's read front, the written index
-		// will become incomplete/stale before it's written.
-
+		// something better (see #2845). Very large tables will generate an
+		// enormous batch here. This isn't really a problem in itself except
+		// that it will exacerbate the other issue:
 		for rows.Next() {
 			rowVals := rows.Values()
 

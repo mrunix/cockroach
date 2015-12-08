@@ -146,9 +146,10 @@ func NewServer(ctx *Context, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	leaseMgr := sql.NewLeaseManager(0, *s.db, s.clock)
+	sqlExecutor := sql.NewExecutor(*s.db, s.gossip, leaseMgr, s.metaRegistry, s.stopper)
 	var gossipUpdater sql.GossipUpdater
 	gossipUpdater.Start(s.stopper, s.db, s.gossip, leaseMgr)
-	s.sqlServer = sql.MakeServer(&s.ctx.Context, *s.db, s.gossip, leaseMgr, s.metaRegistry, s.stopper)
+	s.sqlServer = sql.MakeServer(&s.ctx.Context, sqlExecutor)
 	if err := s.sqlServer.RegisterRPC(s.rpc); err != nil {
 		return nil, err
 	}
