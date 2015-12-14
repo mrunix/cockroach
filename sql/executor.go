@@ -152,11 +152,11 @@ func (e *Executor) Execute(args driver.Request) (driver.Response, int, error) {
 
 	// Send back the session state even if there were application-level errors.
 	// Add transaction to session state.
-	if planMaker.txn != nil {
+	if planMaker.txn.exists() {
 		// TODO(pmattis): Need to record the leases used by a transaction within
 		// the transaction state and restore it when the transaction is restored.
 		planMaker.releaseLeases(e.db)
-		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
+		planMaker.session.Txn = &Session_Transaction{Txn: planMaker.txn.txn.Proto, Timestamp: driver.Timestamp(planMaker.evalCtx.TxnTimestamp.Time)}
 		planMaker.session.MutatesSystemDB = planMaker.txn.SystemDBTrigger()
 	} else {
 		planMaker.session.Txn = nil
@@ -189,7 +189,7 @@ func (e *Executor) execStmts(sql string, planMaker *planner) driver.Response {
 		}
 		resp.Results = append(resp.Results, result)
 		// Release the leases once a transaction is complete.
-		if planMaker.txn == nil {
+		if !planMaker.txn.exists() {
 			planMaker.releaseLeases(e.db)
 
 			// The previous transaction finished executing some schema changes. Wait for
@@ -208,27 +208,27 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	var result driver.Response_Result
 	switch stmt.(type) {
 	case *parser.BeginTransaction:
-		if planMaker.txn != nil {
+		if planMaker.txn.exists() {
 			return result, errTransactionInProgress
 		}
 		// Start a transaction here and not in planMaker to prevent begin
 		// transaction from being called within an auto-transaction below.
 		planMaker.setTxn(client.NewTxn(e.db), time.Now())
-		planMaker.txn.SetDebugName("sql", 0)
+		planMaker.txn.txn.SetDebugName("sql", 0)
 	case *parser.CommitTransaction, *parser.RollbackTransaction:
-		if planMaker.txn == nil {
+		if !planMaker.txn.exists() {
 			return result, errNoTransactionInProgress
-		} else if planMaker.txn.Proto.Status == roachpb.ABORTED {
+		} else if planMaker.txn.Status() == roachpb.ABORTED {
 			// Reset to allow starting a new transaction.
 			planMaker.resetTxn()
 			return result, nil
 		}
 	case *parser.SetTransaction:
-		if planMaker.txn == nil {
+		if !planMaker.txn.exists() {
 			return result, errNoTransactionInProgress
 		}
 	default:
-		if planMaker.txn != nil && planMaker.txn.Proto.Status == roachpb.ABORTED {
+		if planMaker.txn.exists() && planMaker.txn.Status() == roachpb.ABORTED {
 			return result, errTransactionAborted
 		}
 	}
@@ -296,8 +296,11 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 	}
 
 	// If there is a pending transaction.
-	if planMaker.txn != nil {
+	if planMaker.txn.exists() {
 		err := f(time.Now())
+		if err == nil {
+			err = planMaker.txn.flushBatch()
+		}
 		return result, err
 	}
 
@@ -323,6 +326,9 @@ func (e *Executor) execStmt(stmt parser.Statement, planMaker *planner) (driver.R
 		timestamp := time.Now()
 		planMaker.setTxn(txn, timestamp)
 		err := f(timestamp)
+		if err == nil {
+			err = planMaker.txn.Commit()
+		}
 		planMaker.resetTxn()
 		return err
 	})
@@ -371,7 +377,7 @@ func (e *Executor) waitForCompletedSchemaChangesToPropagate(planMaker *planner) 
 // the transaction before returning. The client does not have to
 // deal with cleaning up transaction state.
 func makeResultFromError(planMaker *planner, err error) driver.Response_Result {
-	if planMaker.txn != nil {
+	if planMaker.txn.exists() {
 		if err != errTransactionAborted {
 			planMaker.txn.Cleanup(err)
 		}

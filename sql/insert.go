@@ -20,7 +20,6 @@ package sql
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/client"
 	"github.com/cockroachdb/cockroach/sql/parser"
 	"github.com/cockroachdb/cockroach/sql/privilege"
 	"github.com/cockroachdb/cockroach/util"
@@ -124,7 +123,7 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 
 	marshalled := make([]interface{}, len(cols))
 
-	b := client.Batch{}
+	b := p.txn.getBatch()
 	result := &valuesNode{}
 	for rows.Next() {
 		rowVals := rows.Values()
@@ -233,9 +232,9 @@ func (p *planner) Insert(n *parser.Insert) (planNode, error) {
 		// Mark transaction as operating on the system DB.
 		p.txn.SetSystemDBTrigger()
 	}
-	if err := p.txn.Run(&b); err != nil {
-		return nil, convertBatchError(tableDesc, b, err)
-	}
+	// if err := p.txn.flushBatch(); err != nil {
+	// 	return nil, convertBatchError(tableDesc, *b, err)
+	// }
 
 	return result, nil
 }

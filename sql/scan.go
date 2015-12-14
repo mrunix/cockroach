@@ -146,7 +146,7 @@ func prettySpans(spans []span, skip int) string {
 // reconstructing them into rows.
 type scanNode struct {
 	planner          *planner
-	txn              *client.Txn
+	txn              *batchedTxn
 	desc             *TableDescriptor
 	index            *IndexDescriptor
 	spans            []span

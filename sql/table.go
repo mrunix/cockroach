@@ -234,7 +234,7 @@ func (p *planner) getTableLease(qname *parser.QualifiedName) (*TableDescriptor, 
 	lease, ok := p.leases[tableID]
 	if !ok {
 		var err error
-		lease, err = p.leaseMgr.Acquire(p.txn, tableID, 0)
+		lease, err = p.leaseMgr.Acquire(p.txn.txn, tableID, 0)
 		if err != nil {
 			return nil, err
 		}

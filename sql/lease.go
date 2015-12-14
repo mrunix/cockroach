@@ -98,7 +98,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 
 	// Use the supplied (user) transaction to look up the descriptor because the
 	// descriptor might have been created within the transaction.
-	p := planner{txn: txn, user: security.RootUser}
+	p := planner{user: security.RootUser}
+	p.txn.txn = txn
 
 	const getDescriptor = `SELECT descriptor FROM system.descriptor WHERE id = %d`
 	sql := fmt.Sprintf(getDescriptor, tableID)
@@ -140,7 +141,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 	// modify the descriptor and even if the descriptor is never created we'll
 	// just have a dangling lease entry which will eventually get GC'd.
 	err = s.db.Txn(func(txn *client.Txn) error {
-		p := planner{txn: txn, user: security.RootUser}
+		p := planner{user: security.RootUser}
+		p.txn.txn = txn
 		const insertLease = `INSERT INTO system.lease (descID, version, nodeID, expiration) ` +
 			`VALUES (%d, %d, %d, '%s'::timestamp)`
 		sql = fmt.Sprintf(insertLease, lease.ID, lease.Version, s.nodeID, lease.expiration)
@@ -159,7 +161,8 @@ func (s LeaseStore) Acquire(txn *client.Txn, tableID ID, minVersion DescriptorVe
 // Release a previously acquired table descriptor lease.
 func (s LeaseStore) Release(lease *LeaseState) error {
 	return s.db.Txn(func(txn *client.Txn) error {
-		p := planner{txn: txn, user: security.RootUser}
+		p := planner{user: security.RootUser}
+		p.txn.txn = txn
 
 		const deleteLease = `DELETE FROM system.lease ` +
 			`WHERE (descID, version, nodeID, expiration) = (%d, %d, %d, '%s'::timestamp)`
@@ -289,7 +292,8 @@ func (s LeaseStore) Publish(tableID ID, update func(*TableDescriptor) error) err
 func (s LeaseStore) countLeases(descID ID, version DescriptorVersion, expiration time.Time) (int, error) {
 	var count int
 	err := s.db.Txn(func(txn *client.Txn) error {
-		p := planner{txn: txn, user: security.RootUser}
+		p := planner{user: security.RootUser}
+		p.txn.txn = txn
 
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE descID = %d AND version = %d AND expiration > '%s'::timestamp`

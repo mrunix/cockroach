@@ -30,7 +30,7 @@ import (
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution.
 type planner struct {
-	txn          *client.Txn
+	txn          batchedTxn
 	session      Session
 	user         string
 	evalCtx      parser.EvalContext
@@ -59,7 +59,7 @@ type planner struct {
 }
 
 func (p *planner) setTxn(txn *client.Txn, timestamp time.Time) {
-	p.txn = txn
+	p.txn.set(txn)
 	p.evalCtx.TxnTimestamp = parser.DTimestamp{Time: timestamp}
 }
 

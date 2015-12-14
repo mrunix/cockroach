@@ -147,7 +147,7 @@ func (p *planner) backfillBatch(b *client.Batch, oldTableDesc, newTableDesc *Tab
 		// table IDs.
 		scan := &scanNode{
 			planner: p,
-			txn:     p.txn,
+			txn:     &p.txn,
 			desc:    oldTableDesc,
 		}
 		scan.initDescDefaults()

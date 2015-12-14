@@ -40,7 +40,7 @@ import (
 //   Notes: postgres requires SELECT. Also requires UPDATE on "FOR UPDATE".
 //          mysql requires SELECT.
 func (p *planner) Select(n *parser.Select) (planNode, error) {
-	scan := &scanNode{planner: p, txn: p.txn}
+	scan := &scanNode{planner: p, txn: &p.txn}
 	return p.selectWithScan(scan, n)
 }
 
